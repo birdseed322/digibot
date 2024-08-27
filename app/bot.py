@@ -9,6 +9,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoAlertPresentException, UnexpectedAlertPresentException, TimeoutException,NoSuchElementException
 import time
 import os
+from . import config
 
 VSIP_HEADERS = ['vessel_name', 'agent_name', 'ex_name', 'last_port', 'type', 'next_port', 'flag', 'posn', 'callsign', 'status', 'grt', 'beam', 'loa', 'eta', 'etd', 'dec_arrival', 'dec_departure', 'rep_arrival', 'rep_departure']
 MOVEMENT_STATUS_HEADERS = ['date_time', 'from', 'to', 'remarks']
@@ -42,19 +43,20 @@ MOVEMENT_STATUS_HEADERS = ['date_time', 'from', 'to', 'remarks']
 #         print(cells[i].text)
 #     print('----------------------------------')
 # Retrieving environment variables
-LOGIN_URL = os.environ.get('LOGIN_URL')
-USERNAME = os.environ.get('USERNAME')
-PASSWORD = os.environ.get('PASSWORD')
+LOGIN_URL = config.LOGIN_URL or os.environ.get('LOGIN_URL') 
+USERNAME = config.USERNAME or os.environ.get('USERNAME')
+PASSWORD = config.PASSWORD or os.environ.get('PASSWORD')
 
 # For boolean values, you might want to convert them to actual boolean types
-HEADLESS_MODE = os.environ.get('HEADLESS_MODE', 'true').lower() == 'true'
-DEBUG_MODE = os.environ.get('DEBUG_MODE', 'false').lower() == 'true'
+HEADLESS_MODE = (os.environ.get('HEADLESS_MODE', 'false').lower() == 'true') or config.HEADLESS_MODE
+DEBUG_MODE = (os.environ.get('DEBUG_MODE', 'false').lower() == 'true') or config.DEBUG_MODE
 
 class Bot():
     def __init__(self):
         self.driver = self.initialize_driver()
         self.logged_in = False
         self.waiting_on_otp = False
+        self.login()
     
     
     def initialize_driver(self):
@@ -72,15 +74,18 @@ class Bot():
             # Check for a specific element that only appears when logged in
             self.driver.find_element(By.CLASS_NAME, 'logout')
             self.logged_in = True
+            return True
         except NoSuchElementException:
             self.logged_in = False
+            return False
     
     def restart(self):
-        if not self.waiting_on_otp:
+        if not self.waiting_on_otp and self.driver != None:
             print("Restarting")
             self.driver.close()
             self.driver = None
             self.driver = self.initialize_driver()
+            self.logged_in = False
             self.login()
             
             
@@ -120,7 +125,7 @@ class Bot():
                 continue
         
     def handle_otp(self, otp):
-        if self.logged_in:
+        if self.logged_in or not self.waiting_on_otp:
             return
         try:
             # Handle OTP if necessary
@@ -155,20 +160,25 @@ class Bot():
                 EC.presence_of_element_located((By.CSS_SELECTOR, "#dropdownService > div > div > select"))
                 ))
                 nav_tabs.select_by_visible_text('VESSEL INFORMATION ')
-            self.waiting_on_otp = False
             vsip_link = WebDriverWait(self.driver, 10).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "#step0 > div:nth-child(12) > div:nth-child(5) > a"))
             )
             vsip_link.click()
             self.logged_in = True
+            self.waiting_on_otp = False
+            WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.NAME, 'vsl'))
+                )
             print("Successfully handled OTP. Ready to Search.")
         except:
-            self.restart()
+            self.waiting_on_otp = False
     
     
     def search(self, vessel_name):
         try:
-            if not self.logged_in:
+            if self.waiting_on_otp:
+                return None
+            elif not self.logged_in:
                 self.check_login_status()
                 if not self.logged_in:
                     print("Not logged in. Logging in now...")
@@ -185,27 +195,32 @@ class Bot():
                 search_result = search_result.find_elements(By.TAG_NAME, 'tr')
                 if len(search_result) > 2:
                     search_result[1].find_elements(By.TAG_NAME, 'td')[0].click()
-                vsip_confirm = self.driver.find_element(By.NAME, 'vsip')
-                vsip_confirm.click()
-                original_window = self.driver.current_window_handle
-                
-                # Entering paywall
-                original_window = self.driver.current_window_handle
-                WebDriverWait(self.driver, 10).until(EC.alert_is_present())
-                Alert(self.driver).accept()
-                print('First alert accepted')
-                print(original_window)
-                print(self.driver.window_handles)
                 try:
-                    WebDriverWait(self.driver, 10).until(EC.number_of_windows_to_be(2))
+                    vsip_confirm = self.driver.find_element(By.NAME, 'vsip')
+                    vsip_confirm.click()
+                    original_window = self.driver.current_window_handle
+                    
+                    # Entering paywall
+                    original_window = self.driver.current_window_handle
+                    WebDriverWait(self.driver, 10).until(EC.alert_is_present())
+                    print('Alert (1):')
+                    print(Alert(self.driver).text)
+                    Alert(self.driver).accept()
+                    # self.driver.execute_script("window.alert = function() {};")
+                    # print("------------------------------")
+                    # print('Alert (2):')
+                    # print(Alert(self.driver).text)
+                    # Alert(self.driver).accept()
+                    print("Waiting for windows")
+                    print(self.driver.window_handles)
                     print('Number of windows reached')
                     for window_handle in self.driver.window_handles:
+                        print(window_handle)
                         if window_handle != original_window:
                             self.driver.switch_to.window(window_handle)
                             print('Switched to new window')
                             break
-                    Alert(self.driver).accept()
-                except UnexpectedAlertPresentException as e:
+                except Exception as e:
                     print("Unexpected alert handled")
                     try:
                         print("Accepting Alert")
@@ -215,7 +230,6 @@ class Bot():
                                 self.driver.switch_to.window(window_handle)
                                 print('Switched to new window')
                                 break
-                        self.driver.switch_to.alert.accept()
                     except NoAlertPresentException:
                         print("No Alert")
                         for window_handle in self.driver.window_handles:
@@ -223,42 +237,44 @@ class Bot():
                                 self.driver.switch_to.window(window_handle)
                                 print('Switched to new window')
                                 break
-                        self.driver.switch_to.alert.accept()
                         pass
-                    vsip = {}
-                    print("Parsing info")
-                    vsip_table = WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'body > form > table:nth-child(2) > tbody')))
-                    vsip_details = vsip_table.find_elements(By.CLASS_NAME, 'pgeBody6')
-                    for indx in range(0, len(vsip_details)):
-                        vsip[VSIP_HEADERS[indx]] = vsip_details[indx].text
-                    vsip_purpose_table = self.driver.find_element(By.CSS_SELECTOR, 'body > form > table:nth-child(3) > tbody > tr > td.pgeBody6 > table')
-                    vsip_purposes = vsip_purpose_table.find_elements(By.TAG_NAME, 'td')
-                    purposes = []
-                    for purpose in vsip_purposes:
-                        if purpose.text.strip() != "":
-                            purposes.append(purpose.text)
-                    vsip['purposes'] = purposes
-                    movement_status = []
-                    vsip_movement_status_table = self.driver.find_element(By.CSS_SELECTOR, 'body > form > table:nth-child(7) > tbody')
-                    vsip_movement_status = vsip_movement_status_table.find_elements(By.TAG_NAME, 'tr')
-                    for vsip_movement_status in vsip_movement_status:
-                        if vsip_movement_status.get_attribute('bgcolor') != '#3399CC':
-                                movement = {}
-                                cols = vsip_movement_status.find_elements(By.TAG_NAME, 'td')
-                                for indx in range(1, len(cols)):
-                                    movement[MOVEMENT_STATUS_HEADERS[indx - 1]] = cols[indx].text
-                                movement_status.append(movement)
-                    vsip['movement_status'] = movement_status
-                    print(vsip)
-                    self.driver.close()
-                    self.driver.switch_to.window(original_window)
-                    search_again = self.driver.find_element(By.NAME, 'searchAgain')
-                    search_again.click()
-                    WebDriverWait(self.driver, 10).until(
-                                    EC.presence_of_element_located((By.NAME, 'vsl'))
-                                )
-                    print("Ready to search again")
-                    return vsip
+                finally:
+                    self.driver.switch_to.alert.accept()
+                    
+                vsip = {}
+                print("Parsing info")
+                vsip_table = WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'body > form > table:nth-child(2) > tbody')))
+                vsip_details = vsip_table.find_elements(By.CLASS_NAME, 'pgeBody6')
+                for indx in range(0, len(vsip_details)):
+                    vsip[VSIP_HEADERS[indx]] = vsip_details[indx].text
+                vsip_purpose_table = self.driver.find_element(By.CSS_SELECTOR, 'body > form > table:nth-child(3) > tbody > tr > td.pgeBody6 > table')
+                vsip_purposes = vsip_purpose_table.find_elements(By.TAG_NAME, 'td')
+                purposes = []
+                for purpose in vsip_purposes:
+                    if purpose.text.strip() != "":
+                        purposes.append(purpose.text)
+                vsip['purposes'] = purposes
+                movement_status = []
+                vsip_movement_status_table = self.driver.find_element(By.CSS_SELECTOR, 'body > form > table:nth-child(7) > tbody')
+                vsip_movement_status = vsip_movement_status_table.find_elements(By.TAG_NAME, 'tr')
+                for vsip_movement_status in vsip_movement_status:
+                    if vsip_movement_status.get_attribute('bgcolor') != '#3399CC':
+                            movement = {}
+                            cols = vsip_movement_status.find_elements(By.TAG_NAME, 'td')
+                            for indx in range(1, len(cols)):
+                                movement[MOVEMENT_STATUS_HEADERS[indx - 1]] = cols[indx].text
+                            movement_status.append(movement)
+                vsip['movement_status'] = movement_status
+                print(vsip)
+                self.driver.close()
+                self.driver.switch_to.window(original_window)
+                search_again = self.driver.find_element(By.NAME, 'searchAgain')
+                search_again.click()
+                WebDriverWait(self.driver, 10).until(
+                                EC.presence_of_element_located((By.NAME, 'vsl'))
+                            )
+                print("Ready to search again")
+                return vsip
             except Exception as e:
                 print(e) 
                 back_btn = self.driver.find_element(By.NAME, 'back')

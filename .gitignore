@@ -1,2 +1,4 @@
-config.py
+app/config.py
+docker-compose
 __pycache__
+docker-compose.yml
