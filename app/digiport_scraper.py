@@ -23,8 +23,7 @@ def pulse_check():
 @app.get('/vessel/{vessel_name}')
 def query_vessel_vsip(vessel_name:str = Path(description="The name of the vessel you wish to retrieve the VSIP from")):
     # Add text validation before allowing search
-    vsip = bot.search(vessel_name)
-    return vsip
+    return bot.add_to_job_queue(vessel_name)
 
 @app.post('/otp')
 def handle_otp(otp:str):
