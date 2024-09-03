@@ -11,20 +11,23 @@ import time
 import os
 import threading
 import requests
-from . import config
 
 VSIP_HEADERS = ['vessel_name', 'agent_name', 'ex_name', 'last_port', 'type', 'next_port', 'flag', 'posn', 'callsign', 'status', 'grt', 'beam', 'loa', 'eta', 'etd', 'dec_arrival', 'dec_departure', 'rep_arrival', 'rep_departure']
 MOVEMENT_STATUS_HEADERS = ['date_time', 'from', 'to', 'remarks']
 
 # Retrieving environment variables
-LOGIN_URL = config.LOGIN_URL or os.environ.get('LOGIN_URL') 
-USERNAME = config.USERNAME or os.environ.get('USERNAME')
-PASSWORD = config.PASSWORD or os.environ.get('PASSWORD')
-VESSEL_NOW_BACKEND_URL = config.VESSEL_NOW_BACKEND_URL or os.environ.get('VESSEL_NOW_BACKEND_URL')
+LOGIN_URL = os.environ.get('LOGIN_URL') 
+USERNAME = os.environ.get('USERNAME')
+PASSWORD = os.environ.get('PASSWORD')
+VESSEL_NOW_BACKEND_URL = os.environ.get('VESSEL_NOW_BACKEND_URL')
 
 # For boolean values, you might want to convert them to actual boolean types
-HEADLESS_MODE = (os.environ.get('HEADLESS_MODE', 'false').lower() == 'true') or config.HEADLESS_MODE
-DEBUG_MODE = (os.environ.get('DEBUG_MODE', 'false').lower() == 'true') or config.DEBUG_MODE
+HEADLESS_MODE = (os.environ.get('HEADLESS_MODE', 'true').lower() == 'true')
+DEBUG_MODE = (os.environ.get('DEBUG_MODE', 'false').lower() == 'true')
+POST_TO_PRODUCTION = (os.environ.get('POST_TO_PRODUCTION', 'true').lower() == 'true')
+
+if not LOGIN_URL or not USERNAME or not PASSWORD or not VESSEL_NOW_BACKEND_URL:
+    raise ValueError("Missing one or more required environment variables.")
 
 def dom_is_loaded(driver):
     return driver.execute_script("return document.readyState") == "complete"
@@ -62,8 +65,7 @@ class Bot():
         
     def check_login_status(self):
         try:
-            # Check for a specific element that only appears when logged in
-            self.driver.find_element(By.CLASS_NAME, 'logout')
+            self.driver.find_element(By.CLASS_NAME, 'logout') # Check for a specific element that only appears when logged in
             self.logged_in = True
             return True
         except NoSuchElementException:
@@ -77,6 +79,7 @@ class Bot():
             self.driver = None
             self.driver = self.initialize_driver()
             self.logged_in = False
+            self.job_queue = []
             self.login()
                  
     def add_to_job_queue(self, vessel_name):
@@ -252,6 +255,9 @@ class Bot():
                         back_btn = self.driver.find_element(By.NAME, 'back')
                         back_btn.click()
                         print("No such vessel found")
+                        vessel_results.append({
+                            "vessel_name": vessel_name
+                        })
                         WebDriverWait(self.driver, 10).until(
                                         EC.presence_of_element_located((By.NAME, 'vsl'))
                                     )
@@ -259,15 +265,23 @@ class Bot():
                 self.job_queue.clear()
                 print(vessel_results)
                 # Make post request to backend server with the results
-                requests.post(VESSEL_NOW_BACKEND_URL + '/api/vessel-status-in-port/receive', json= {
-                    vessel_results: vessel_results
-                })
-                print("Sent results")
+                if POST_TO_PRODUCTION:
+                    print("Sending results to vessel now backend: " + VESSEL_NOW_BACKEND_URL)
+                    vessel_now_res = requests.post(VESSEL_NOW_BACKEND_URL + '/api/vessel-status-in-port/receive', json= {
+                        'vsip_results': vessel_results
+                    })
+                    if vessel_now_res.status_code == 200:
+                        print("Server response " + vessel_now_res.text)
+                        print("Sent results")
+                    else:
+                        print("Failed to send to VesselNow backend")
+                    
                 return vessel_results
             else:
                 self.driver.refresh()
                 return None
-        except:
-            print("Something horrible went wrong. Prob needs restart")
+        except Exception as e:
+            print("Error occured")
+            print(e)
             self.restart()
             return None
