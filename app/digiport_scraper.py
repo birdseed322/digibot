@@ -1,5 +1,5 @@
 from .bot import Bot
-from fastapi import FastAPI, Path
+from fastapi import FastAPI, Path, Query
 from redis import Redis
 from rq import Queue
 
@@ -20,10 +20,10 @@ def pulse_check():
     return "Logged in."
 
 
-@app.get('/vessel/{vessel_name}')
-def query_vessel_vsip(vessel_name:str = Path(description="The name of the vessel you wish to retrieve the VSIP from")):
+@app.post('/vessel/{vessel_name}')
+def query_vessel_vsip(vessel_name:str = Path(description="The name of the vessel you wish to retrieve the VSIP from"), callsign: str = Query(description="The callsign of the vessel you wish to retrieve the VSIP from")):
     # Add text validation before allowing search
-    return bot.add_to_job_queue(vessel_name)
+    return bot.add_to_job_queue(vessel_name, callsign)
 
 @app.post('/otp')
 def handle_otp(otp:str):

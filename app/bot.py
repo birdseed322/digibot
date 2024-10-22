@@ -82,8 +82,9 @@ class Bot():
             self.job_queue = []
             self.login()
                  
-    def add_to_job_queue(self, vessel_name):
-        self.job_queue.append(vessel_name)
+    def add_to_job_queue(self, vessel_name, callsign):
+        print("Adding " + vessel_name + " (" + callsign + ")")
+        self.job_queue.append((vessel_name, callsign))
         return "Added"
             
     def login(self):
@@ -181,8 +182,8 @@ class Bot():
                     self.login()
             vessel_results = []
             if len(self.job_queue) != 0:
-                for vessel_name in self.job_queue:
-                    print(f"Searching for: {vessel_name}")
+                for vessel_name, callsign in self.job_queue:
+                    print(f"Searching for: {vessel_name}({callsign})")
                     vessel_name_input = WebDriverWait(self.driver, 10).until(
                             EC.presence_of_element_located((By.NAME, 'vsl'))
                         )
@@ -194,9 +195,17 @@ class Bot():
                     try:
                         search_result = self.driver.find_element(By.CSS_SELECTOR, 'body > div:nth-child(26) > form > table:nth-child(3) > tbody')
                         search_result = search_result.find_elements(By.TAG_NAME, 'tr')
-                        # TODO: Optimise to also add callsign as additional check
+                        selected = False
                         if len(search_result) > 2:
-                            search_result[1].find_elements(By.TAG_NAME, 'td')[0].click()
+                            for row in search_result[1:]:
+                              current_callsign = row.find_elements(By.TAG_NAME, 'td')[1].find_element(By.TAG_NAME, 'div').text
+                              if (current_callsign.lower() == callsign.lower()):
+                                row.find_elements(By.TAG_NAME, 'td')[0].click()
+                                selected = True
+                                break
+                        
+                        if not selected:
+                          raise Exception("Results failed")
                         vsip_confirm = self.driver.find_element(By.NAME, 'vsip')
                         vsip_confirm.click()
                         Alert(self.driver).accept()
@@ -270,9 +279,8 @@ class Bot():
                     vessel_now_res = requests.post(VESSEL_NOW_BACKEND_URL + '/api/vessel-status-in-port/receive', json= {
                         'vsip_results': vessel_results
                     })
-                    if vessel_now_res.status_code == 200:
-                        print("Server response " + vessel_now_res.text)
-                        print("Sent results")
+                    if vessel_now_res.status_code == 204:
+                        print("Successfully Sent results")
                     else:
                         print("Failed to send to VesselNow backend")
                     
