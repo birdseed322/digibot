@@ -205,7 +205,9 @@ class Bot():
                                 break
                         
                         if not selected:
-                          raise Exception("Results failed")
+                          # If non selected. Pick the first.
+                          search_result[1].find_elements(By.TAG_NAME, 'td')[0].click()
+                          
                         vsip_confirm = self.driver.find_element(By.NAME, 'vsip')
                         vsip_confirm.click()
                         Alert(self.driver).accept()
