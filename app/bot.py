@@ -196,7 +196,7 @@ class Bot():
                         search_result = self.driver.find_element(By.CSS_SELECTOR, 'body > div:nth-child(26) > form > table:nth-child(3) > tbody')
                         search_result = search_result.find_elements(By.TAG_NAME, 'tr')
                         selected = False
-                        if len(search_result) > 2:
+                        if len(search_result) >= 2:
                             for row in search_result[1:]:
                               current_callsign = row.find_elements(By.TAG_NAME, 'td')[1].find_element(By.TAG_NAME, 'div').text
                               if (current_callsign.lower() == callsign.lower()):
