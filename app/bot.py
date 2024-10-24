@@ -195,19 +195,18 @@ class Bot():
                     try:
                         search_result = self.driver.find_element(By.CSS_SELECTOR, 'body > div:nth-child(26) > form > table:nth-child(3) > tbody')
                         search_result = search_result.find_elements(By.TAG_NAME, 'tr')
-                        selected = False
-                        if len(search_result) >= 2:
+                        print("Looping")
+                        if len(search_result) > 2:
                             for row in search_result[1:]:
                               current_callsign = row.find_elements(By.TAG_NAME, 'td')[1].find_element(By.TAG_NAME, 'div').text
                               if (current_callsign.lower() == callsign.lower()):
                                 row.find_elements(By.TAG_NAME, 'td')[0].click()
-                                selected = True
                                 break
                         
-                        if not selected:
-                          # If non selected. Pick the first.
-                          search_result[1].find_elements(By.TAG_NAME, 'td')[0].click()
-                          
+                        # if not selected:
+                        #   # If non selected. Pick the first.
+                        #   search_result[1].find_elements(By.TAG_NAME, 'td')[0].click()
+                        print("Find vsip")
                         vsip_confirm = self.driver.find_element(By.NAME, 'vsip')
                         vsip_confirm.click()
                         Alert(self.driver).accept()
