@@ -242,16 +242,21 @@ class Bot():
                                 purposes.append(purpose.text)
                         vsip['purposes'] = purposes
                         movement_status = []
-                        vsip_movement_status_table = self.driver.find_element(By.CSS_SELECTOR, 'body > form > table:nth-child(7) > tbody')
-                        vsip_movement_status = vsip_movement_status_table.find_elements(By.TAG_NAME, 'tr')
-                        for vsip_movement_status in vsip_movement_status:
-                            if vsip_movement_status.get_attribute('bgcolor') != '#3399CC':
-                                    movement = {}
-                                    cols = vsip_movement_status.find_elements(By.TAG_NAME, 'td')
-                                    for indx in range(1, len(cols)):
-                                        movement[MOVEMENT_STATUS_HEADERS[indx - 1]] = cols[indx].text
-                                    movement_status.append(movement)
+                        try:
+                          vsip_movement_status_table = self.driver.find_element(By.CSS_SELECTOR, 'body > form > table:nth-child(7) > tbody')
+                          vsip_movement_status = vsip_movement_status_table.find_elements(By.TAG_NAME, 'tr')
+                          for vsip_movement_status in vsip_movement_status:
+                              if vsip_movement_status.get_attribute('bgcolor') != '#3399CC':
+                                      movement = {}
+                                      cols = vsip_movement_status.find_elements(By.TAG_NAME, 'td')
+                                      for indx in range(1, len(cols)):
+                                          movement[MOVEMENT_STATUS_HEADERS[indx - 1]] = cols[indx].text
+                                      movement_status.append(movement)
+                        except:
+                          print("No Vessel Movement")
+                        
                         vsip['movement_status'] = movement_status
+                          
                         self.driver.close()
                         self.driver.switch_to.window(original_window)
                         search_again = self.driver.find_element(By.NAME, 'searchAgain')
